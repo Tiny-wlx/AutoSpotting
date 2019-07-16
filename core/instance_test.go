@@ -82,7 +82,7 @@ func TestGet(t *testing.T) {
 		name     string
 		catalog  instanceMap
 		idToGet  string
-		expected *instance
+		expected *Instance
 	}{
 		{name: "map contains the required instance",
 			catalog: instanceMap{
@@ -91,7 +91,7 @@ func TestGet(t *testing.T) {
 				"inst3": {Instance: &ec2.Instance{InstanceId: aws.String("3")}},
 			},
 			idToGet:  "inst2",
-			expected: &instance{Instance: &ec2.Instance{InstanceId: aws.String("2")}},
+			expected: &Instance{Instance: &ec2.Instance{InstanceId: aws.String("2")}},
 		},
 		{name: "catalog doesn't contain the instance",
 			catalog: instanceMap{
@@ -224,7 +224,7 @@ func TestIsSpot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			i := &instance{Instance: &ec2.Instance{}}
+			i := &Instance{Instance: &ec2.Instance{}}
 			i.InstanceLifecycle = tt.lifeCycle
 			retValue := i.isSpot()
 			if retValue != tt.expected {
@@ -242,14 +242,14 @@ func TestIsEBSCompatible(t *testing.T) {
 	tests := []struct {
 		name         string
 		spotInfo     instanceTypeInformation
-		instanceInfo instance
+		instanceInfo Instance
 		expected     bool
 	}{
 		{name: "EBS not Optimized Spot not Optimized",
 			spotInfo: instanceTypeInformation{
 				EBSThroughput: 0,
 			},
-			instanceInfo: instance{
+			instanceInfo: Instance{
 				typeInfo: instanceTypeInformation{
 					EBSThroughput: 0,
 				},
@@ -260,7 +260,7 @@ func TestIsEBSCompatible(t *testing.T) {
 			spotInfo: instanceTypeInformation{
 				EBSThroughput: 100,
 			},
-			instanceInfo: instance{
+			instanceInfo: Instance{
 				typeInfo: instanceTypeInformation{
 					EBSThroughput: 100,
 				},
@@ -271,7 +271,7 @@ func TestIsEBSCompatible(t *testing.T) {
 			spotInfo: instanceTypeInformation{
 				EBSThroughput: 200,
 			},
-			instanceInfo: instance{
+			instanceInfo: Instance{
 				typeInfo: instanceTypeInformation{
 					EBSThroughput: 100,
 				},
@@ -282,7 +282,7 @@ func TestIsEBSCompatible(t *testing.T) {
 			spotInfo: instanceTypeInformation{
 				EBSThroughput: 0,
 			},
-			instanceInfo: instance{
+			instanceInfo: Instance{
 				typeInfo: instanceTypeInformation{
 					EBSThroughput: 100,
 				},
@@ -293,7 +293,7 @@ func TestIsEBSCompatible(t *testing.T) {
 			spotInfo: instanceTypeInformation{
 				EBSThroughput: 100,
 			},
-			instanceInfo: instance{
+			instanceInfo: Instance{
 				typeInfo: instanceTypeInformation{
 					EBSThroughput: 0,
 				},
@@ -365,7 +365,7 @@ func TestIsPriceCompatible(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			i := &instance{Instance: &ec2.Instance{
+			i := &Instance{Instance: &ec2.Instance{
 				Placement: &ec2.Placement{
 					AvailabilityZone: tt.availabilityZone,
 				}},
@@ -460,7 +460,7 @@ func TestIsClassCompatible(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			i := &instance{typeInfo: instanceTypeInformation{
+			i := &Instance{typeInfo: instanceTypeInformation{
 				vCPU:              tt.instanceCPU,
 				memory:            tt.instanceMemory,
 				PhysicalProcessor: "Intel",
@@ -590,7 +590,7 @@ func TestIsStorageCompatible(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			i := &instance{typeInfo: tt.instanceInfo}
+			i := &Instance{typeInfo: tt.instanceInfo}
 			retValue := i.isStorageCompatible(tt.spotInfo, tt.attachedVolumes)
 			if retValue != tt.expected {
 				t.Errorf("Value received: %t expected %t", retValue, tt.expected)
@@ -635,7 +635,7 @@ func TestIsVirtualizationCompatible(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			i := &instance{Instance: &ec2.Instance{
+			i := &Instance{Instance: &ec2.Instance{
 				VirtualizationType: tt.instanceVirtualizationType,
 				InstanceType:       aws.String("dummy"),
 			}}
@@ -651,7 +651,7 @@ func TestGetCheapestCompatibleSpotInstanceType(t *testing.T) {
 	tests := []struct {
 		name                  string
 		spotInfos             map[string]instanceTypeInformation
-		instanceInfo          *instance
+		instanceInfo          *Instance
 		asg                   *autoScalingGroup
 		expectedCandidateList []string
 		expectedError         error
@@ -712,7 +712,7 @@ func TestGetCheapestCompatibleSpotInstanceType(t *testing.T) {
 					virtualizationTypes:      []string{"PV", "else"},
 				},
 			},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				Instance: &ec2.Instance{
 					VirtualizationType: aws.String("paravirtual"),
 					Placement: &ec2.Placement{
@@ -789,7 +789,7 @@ func TestGetCheapestCompatibleSpotInstanceType(t *testing.T) {
 					virtualizationTypes:      []string{"PV", "else"},
 				},
 			},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				Instance: &ec2.Instance{
 					VirtualizationType: aws.String("paravirtual"),
 					Placement: &ec2.Placement{
@@ -870,7 +870,7 @@ func TestGetCheapestCompatibleSpotInstanceType(t *testing.T) {
 					virtualizationTypes:      []string{"PV", "else"},
 				},
 			},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				Instance: &ec2.Instance{
 					VirtualizationType: aws.String("paravirtual"),
 					Placement: &ec2.Placement{
@@ -948,7 +948,7 @@ func TestGetCheapestCompatibleSpotInstanceType(t *testing.T) {
 					virtualizationTypes:      []string{"PV", "else"},
 				},
 			},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				Instance: &ec2.Instance{
 					VirtualizationType: aws.String("paravirtual"),
 					Placement: &ec2.Placement{
@@ -1027,7 +1027,7 @@ func TestGetCheapestCompatibleSpotInstanceType(t *testing.T) {
 					virtualizationTypes:      []string{"PV", "else"},
 				},
 			},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				Instance: &ec2.Instance{
 					VirtualizationType: aws.String("paravirtual"),
 					Placement: &ec2.Placement{
@@ -1137,7 +1137,7 @@ func TestGetPricetoBid(t *testing.T) {
 				SpotPriceBufferPercentage: tt.spotPercentage,
 				BiddingPolicy:             tt.policy,
 			}}
-		i := &instance{
+		i := &Instance{
 			region: &region{
 				name: "us-east-1",
 				conf: cfg,
@@ -1158,13 +1158,13 @@ func TestTerminate(t *testing.T) {
 	tests := []struct {
 		name     string
 		tags     []*ec2.Tag
-		inst     *instance
+		inst     *Instance
 		expected error
 	}{
 		{
 			name: "no issue with terminate",
 			tags: []*ec2.Tag{},
-			inst: &instance{
+			inst: &Instance{
 				Instance: &ec2.Instance{
 					InstanceId: aws.String("id1"),
 					State: &ec2.InstanceState{
@@ -1184,7 +1184,7 @@ func TestTerminate(t *testing.T) {
 		{
 			name: "issue with terminate",
 			tags: []*ec2.Tag{},
-			inst: &instance{
+			inst: &Instance{
 				Instance: &ec2.Instance{
 					InstanceId: aws.String("id1"),
 					State: &ec2.InstanceState{
@@ -1316,7 +1316,7 @@ func TestGenerateTagList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			i := instance{
+			i := Instance{
 				Instance: &ec2.Instance{
 					Tags: tt.instanceTags,
 				},
@@ -1450,7 +1450,7 @@ func Test_instance_convertBlockDeviceMappings(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			i := &instance{}
+			i := &Instance{}
 			if got := i.convertBlockDeviceMappings(tt.lc); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("instance.convertBlockDeviceMappings() = %v, want %v", got, tt.want)
 			}
@@ -1462,12 +1462,12 @@ func Test_instance_convertSecurityGroups(t *testing.T) {
 
 	tests := []struct {
 		name string
-		inst instance
+		inst Instance
 		want []*string
 	}{
 		{
 			name: "missing SGs",
-			inst: instance{
+			inst: Instance{
 				Instance: &ec2.Instance{
 					SecurityGroups: []*ec2.GroupIdentifier{},
 				},
@@ -1476,7 +1476,7 @@ func Test_instance_convertSecurityGroups(t *testing.T) {
 		},
 		{
 			name: "single SG",
-			inst: instance{
+			inst: Instance{
 				Instance: &ec2.Instance{
 					SecurityGroups: []*ec2.GroupIdentifier{{
 						GroupId:   aws.String("sg-123"),
@@ -1488,7 +1488,7 @@ func Test_instance_convertSecurityGroups(t *testing.T) {
 		},
 		{
 			name: "multiple SGs",
-			inst: instance{
+			inst: Instance{
 				Instance: &ec2.Instance{
 					SecurityGroups: []*ec2.GroupIdentifier{{
 						GroupId:   aws.String("sg-123"),
@@ -1522,13 +1522,13 @@ func Test_instance_createRunInstancesInput(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		inst instance
+		inst Instance
 		args args
 		want *ec2.RunInstancesInput
 	}{
 		{
 			name: "create run instances input with basic launch template",
-			inst: instance{
+			inst: Instance{
 				region: &region{
 					services: connections{
 						ec2: mockEC2{
@@ -1640,7 +1640,7 @@ func Test_instance_createRunInstancesInput(t *testing.T) {
 		},
 		{
 			name: "create run instances input with launch template containing advanced network configuration",
-			inst: instance{
+			inst: Instance{
 				region: &region{
 					services: connections{
 						ec2: mockEC2{
@@ -1759,7 +1759,7 @@ func Test_instance_createRunInstancesInput(t *testing.T) {
 		},
 		{
 			name: "create run instances input with simple LC",
-			inst: instance{
+			inst: Instance{
 				asg: &autoScalingGroup{
 					name: "mygroup",
 					Group: &autoscaling.Group{
@@ -1865,7 +1865,7 @@ func Test_instance_createRunInstancesInput(t *testing.T) {
 
 		{
 			name: "create run instances input with full launch configuration",
-			inst: instance{
+			inst: Instance{
 				asg: &autoScalingGroup{
 					name: "mygroup",
 					Group: &autoscaling.Group{
@@ -2004,7 +2004,7 @@ func Test_instance_createRunInstancesInput(t *testing.T) {
 			})
 
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("instance.createRunInstancesInput() = %v, want %v", got, tt.want)
+				t.Errorf("Instance.createRunInstancesInput() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -2016,14 +2016,14 @@ func Test_instance_isReadyToAttach(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		instance instance
+		Instance Instance
 		asg      *autoScalingGroup
 		want     bool
 	}{
 
 		{
 			name: "pending instance",
-			instance: instance{
+			Instance: Instance{
 				Instance: &ec2.Instance{
 					InstanceId: aws.String("i-123"),
 					LaunchTime: &tenMinutesAgo,
@@ -2042,7 +2042,7 @@ func Test_instance_isReadyToAttach(t *testing.T) {
 		},
 		{
 			name: "not-ready running instance",
-			instance: instance{
+			Instance: Instance{
 				Instance: &ec2.Instance{
 					InstanceId: aws.String("i-123"),
 					LaunchTime: &tenMinutesAgo,
@@ -2061,7 +2061,7 @@ func Test_instance_isReadyToAttach(t *testing.T) {
 		},
 		{
 			name: "ready running instance",
-			instance: instance{
+			Instance: Instance{
 				Instance: &ec2.Instance{
 					InstanceId: aws.String("i-123"),
 					LaunchTime: &tenMinutesAgo,
@@ -2082,8 +2082,8 @@ func Test_instance_isReadyToAttach(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			if got := tt.instance.isReadyToAttach(tt.asg); got != tt.want {
-				t.Errorf("instance.isReadyToAttach() = %v, want %v", got, tt.want)
+			if got := tt.Instance.isReadyToAttach(tt.asg); got != tt.want {
+				t.Errorf("Instance.isReadyToAttach() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -2093,13 +2093,13 @@ func Test_instance_isSameArch(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		instance      instance
+		Instance      Instance
 		spotCandidate instanceTypeInformation
 		want          bool
 	}{
 		{
 			name: "Same architecture: both Intel",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "Intel",
 				},
@@ -2112,7 +2112,7 @@ func Test_instance_isSameArch(t *testing.T) {
 
 		{
 			name: "Same architecture: both AMD",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "AMD",
 				},
@@ -2125,7 +2125,7 @@ func Test_instance_isSameArch(t *testing.T) {
 
 		{
 			name: "Same architecture: Intel and AMD",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "Intel",
 				},
@@ -2138,7 +2138,7 @@ func Test_instance_isSameArch(t *testing.T) {
 
 		{
 			name: "Same architecture: AMD and Intel",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "AMD",
 				},
@@ -2151,7 +2151,7 @@ func Test_instance_isSameArch(t *testing.T) {
 
 		{
 			name: "Same architecture: Intel and Variable",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "Intel",
 				},
@@ -2164,7 +2164,7 @@ func Test_instance_isSameArch(t *testing.T) {
 
 		{
 			name: "Same architecture: Variable and Intel",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "Variable",
 				},
@@ -2177,7 +2177,7 @@ func Test_instance_isSameArch(t *testing.T) {
 
 		{
 			name: "Same architecture, both ARM-based",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "AWS",
 				},
@@ -2190,7 +2190,7 @@ func Test_instance_isSameArch(t *testing.T) {
 
 		{
 			name: "Different architecture, Intel and ARM",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "Intel",
 				},
@@ -2203,7 +2203,7 @@ func Test_instance_isSameArch(t *testing.T) {
 
 		{
 			name: "Different architecture, AMD and ARM",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "Intel",
 				},
@@ -2216,7 +2216,7 @@ func Test_instance_isSameArch(t *testing.T) {
 
 		{
 			name: "Different architecture, ARM and Intel",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "AWS",
 				},
@@ -2229,7 +2229,7 @@ func Test_instance_isSameArch(t *testing.T) {
 
 		{
 			name: "Different architecture, ARM and AMD",
-			instance: instance{
+			Instance: Instance{
 				typeInfo: instanceTypeInformation{
 					PhysicalProcessor: "AWS",
 				},
@@ -2243,8 +2243,8 @@ func Test_instance_isSameArch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.instance.isSameArch(tt.spotCandidate); got != tt.want {
-				t.Errorf("instance.isSameArch() = %v, want %v", got, tt.want)
+			if got := tt.Instance.isSameArch(tt.spotCandidate); got != tt.want {
+				t.Errorf("Instance.isSameArch() = %v, want %v", got, tt.want)
 			}
 		})
 	}

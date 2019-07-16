@@ -129,11 +129,26 @@ func Handler(ctx context.Context, rawEvent json.RawMessage) {
 	// If event is Instance Spot Interruption
 	if cloudwatchEvent.DetailType == "EC2 Spot Instance Interruption Warning" {
 		if instanceID, err := autospotting.GetInstanceIDDueForTermination(cloudwatchEvent); err != nil {
+			log.Println("Could't get instance ID of terminating spot instance", err.Error())
 			return
 		} else if instanceID != nil {
 			spotTermination := autospotting.NewSpotTermination(cloudwatchEvent.Region)
 			spotTermination.ExecuteAction(instanceID, conf.TerminationNotificationAction)
 		}
+
+		// If event is Instance state change, likely for instance launch
+	} else if cloudwatchEvent.DetailType == "EC2 Instance State-change Notification" {
+		instance, err := autospotting.GetPendingReplaceableOnDemandInstance(cloudwatchEvent, conf.Config)
+		if err != nil {
+			log.Println("Could't get instance ID of newly launched instance", err.Error())
+			return
+		}
+
+		if err := instance.ReplaceWithSpotAndTerminate(); err != nil {
+			log.Println("Could't get replace on-demand instance", err.Error())
+			return
+		}
+
 	} else {
 		// Event is Autospotting Cron Scheduling
 		run()

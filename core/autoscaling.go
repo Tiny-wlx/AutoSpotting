@@ -275,7 +275,7 @@ func (a *autoScalingGroup) getInstance(
 	availabilityZone *string,
 	onDemand bool,
 	considerInstanceProtection bool,
-) *instance {
+) *Instance {
 
 	for i := range a.instances.instances() {
 
@@ -307,22 +307,22 @@ func (a *autoScalingGroup) getInstance(
 	return nil
 }
 
-func (a *autoScalingGroup) getUnprotectedOnDemandInstanceInAZ(az *string) *instance {
+func (a *autoScalingGroup) getUnprotectedOnDemandInstanceInAZ(az *string) *Instance {
 	return a.getInstance(az, true, true)
 }
-func (a *autoScalingGroup) getAnyUnprotectedOnDemandInstance() *instance {
+func (a *autoScalingGroup) getAnyUnprotectedOnDemandInstance() *Instance {
 	return a.getInstance(nil, true, true)
 }
 
-func (a *autoScalingGroup) getAnyOnDemandInstance() *instance {
+func (a *autoScalingGroup) getAnyOnDemandInstance() *Instance {
 	return a.getInstance(nil, true, false)
 }
 
-func (a *autoScalingGroup) getAnySpotInstance() *instance {
+func (a *autoScalingGroup) getAnySpotInstance() *Instance {
 	return a.getInstance(nil, false, false)
 }
 
-func (a *autoScalingGroup) hasMemberInstance(inst *instance) bool {
+func (a *autoScalingGroup) hasMemberInstance(inst *Instance) bool {
 	for _, member := range a.Instances {
 		if *member.InstanceId == *inst.InstanceId {
 			return true
@@ -331,7 +331,7 @@ func (a *autoScalingGroup) hasMemberInstance(inst *instance) bool {
 	return false
 }
 
-func (a *autoScalingGroup) findUnattachedInstanceLaunchedForThisASG() *instance {
+func (a *autoScalingGroup) findUnattachedInstanceLaunchedForThisASG() *Instance {
 	for inst := range a.region.instances.instances() {
 		for _, tag := range inst.Tags {
 			if *tag.Key == "launched-for-asg" && *tag.Value == a.name {
@@ -344,7 +344,7 @@ func (a *autoScalingGroup) findUnattachedInstanceLaunchedForThisASG() *instance 
 	return nil
 }
 
-func (a *autoScalingGroup) getAllowedInstanceTypes(baseInstance *instance) []string {
+func (a *autoScalingGroup) getAllowedInstanceTypes(baseInstance *Instance) []string {
 	var allowedInstanceTypesTag string
 
 	// By default take the command line parameter
@@ -371,7 +371,7 @@ func (a *autoScalingGroup) getAllowedInstanceTypes(baseInstance *instance) []str
 	})
 }
 
-func (a *autoScalingGroup) getDisallowedInstanceTypes(baseInstance *instance) []string {
+func (a *autoScalingGroup) getDisallowedInstanceTypes(baseInstance *Instance) []string {
 	var disallowedInstanceTypesTag string
 
 	// By default take the command line parameter

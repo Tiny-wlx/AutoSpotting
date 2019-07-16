@@ -17,7 +17,7 @@ import (
 
 // The key in this map is the instance ID, useful for quick retrieval of
 // instance attributes.
-type instanceMap map[string]*instance
+type instanceMap map[string]*Instance
 
 type instanceManager struct {
 	sync.RWMutex
@@ -25,12 +25,12 @@ type instanceManager struct {
 }
 
 type instances interface {
-	add(inst *instance)
-	get(string) *instance
+	add(inst *Instance)
+	get(string) *Instance
 	count() int
 	count64() int64
 	make()
-	instances() <-chan *instance
+	instances() <-chan *Instance
 	dump() string
 }
 
@@ -53,7 +53,7 @@ func (is *instanceManager) make() {
 	is.Unlock()
 }
 
-func (is *instanceManager) add(inst *instance) {
+func (is *instanceManager) add(inst *Instance) {
 	if inst == nil {
 		return
 	}
@@ -63,7 +63,7 @@ func (is *instanceManager) add(inst *instance) {
 	is.catalog[*inst.InstanceId] = inst
 }
 
-func (is *instanceManager) get(id string) (inst *instance) {
+func (is *instanceManager) get(id string) (inst *Instance) {
 	is.RLock()
 	defer is.RUnlock()
 	return is.catalog[id]
@@ -80,8 +80,8 @@ func (is *instanceManager) count64() int64 {
 	return int64(is.count())
 }
 
-func (is *instanceManager) instances() <-chan *instance {
-	retC := make(chan *instance)
+func (is *instanceManager) instances() <-chan *Instance {
+	retC := make(chan *Instance)
 	go func() {
 		is.RLock()
 		defer is.RUnlock()
@@ -94,7 +94,8 @@ func (is *instanceManager) instances() <-chan *instance {
 	return retC
 }
 
-type instance struct {
+// Instance wraps an ec2.Instance and has some additional fields and functions
+type Instance struct {
 	*ec2.Instance
 	typeInfo  instanceTypeInformation
 	price     float64
@@ -124,7 +125,7 @@ type instanceTypeInformation struct {
 	EBSThroughput            float32
 }
 
-func (i *instance) calculatePrice(spotCandidate instanceTypeInformation) float64 {
+func (i *Instance) calculatePrice(spotCandidate instanceTypeInformation) float64 {
 	spotPrice := spotCandidate.pricing.spot[*i.Placement.AvailabilityZone]
 	debug.Println("Comparing price spot/instance:")
 
@@ -138,12 +139,12 @@ func (i *instance) calculatePrice(spotCandidate instanceTypeInformation) float64
 	return spotPrice
 }
 
-func (i *instance) isSpot() bool {
+func (i *Instance) isSpot() bool {
 	return i.InstanceLifecycle != nil &&
 		*i.InstanceLifecycle == "spot"
 }
 
-func (i *instance) isProtectedFromTermination() bool {
+func (i *Instance) isProtectedFromTermination() bool {
 
 	// determine and set the API termination protection field
 	diaRes, err := i.region.services.ec2.DescribeInstanceAttribute(
@@ -163,7 +164,7 @@ func (i *instance) isProtectedFromTermination() bool {
 	return false
 }
 
-func (i *instance) isProtectedFromScaleIn() bool {
+func (i *Instance) isProtectedFromScaleIn() bool {
 	if i.asg == nil {
 		return false
 	}
@@ -180,12 +181,12 @@ func (i *instance) isProtectedFromScaleIn() bool {
 	return false
 }
 
-func (i *instance) canTerminate() bool {
+func (i *Instance) canTerminate() bool {
 	return *i.State.Name != ec2.InstanceStateNameTerminated &&
 		*i.State.Name != ec2.InstanceStateNameShuttingDown
 }
 
-func (i *instance) terminate() error {
+func (i *Instance) terminate() error {
 	svc := i.region.services.ec2
 	if i.canTerminate() {
 		_, err := svc.TerminateInstances(&ec2.TerminateInstancesInput{
@@ -199,7 +200,45 @@ func (i *instance) terminate() error {
 	return nil
 }
 
-func (i *instance) isPriceCompatible(spotPrice float64) bool {
+func (i *Instance) shouldBeReplacedWithSpot() bool {
+	return i.belongsToEnabledASG() &&
+		i.asgNeedsReplacement() &&
+		!i.isSpot() &&
+		!i.isProtectedFromScaleIn() &&
+		!i.isProtectedFromTermination()
+}
+
+func (i *Instance) belongsToEnabledASG() bool {
+	belongs, asgName := i.belongsToAnASG()
+	if !belongs {
+		logger.Printf("%s instane %s doesn't belong to any ASG",
+			i.region.name, *i.InstanceId)
+		return false
+	}
+
+	for _, asg := range i.region.enabledASGs {
+		if asg.name == *asgName {
+			i.asg = &asg
+			return true
+		}
+	}
+	return false
+}
+
+func (i *Instance) belongsToAnASG() (bool, *string) {
+	for _, tag := range i.Tags {
+		if *tag.Key == "aws:autoscaling:groupName" {
+			return true, tag.Value
+		}
+	}
+	return false, nil
+}
+
+func (i *Instance) asgNeedsReplacement() bool {
+	return i.asg.needReplaceOnDemandInstances()
+}
+
+func (i *Instance) isPriceCompatible(spotPrice float64) bool {
 	if spotPrice == 0 {
 		logger.Printf("\tUnavailable in this Availability Zone")
 		return false
@@ -213,7 +252,7 @@ func (i *instance) isPriceCompatible(spotPrice float64) bool {
 	return false
 }
 
-func (i *instance) isClassCompatible(spotCandidate instanceTypeInformation) bool {
+func (i *Instance) isClassCompatible(spotCandidate instanceTypeInformation) bool {
 	current := i.typeInfo
 
 	debug.Println("Comparing class spot/instance:")
@@ -232,7 +271,7 @@ func (i *instance) isClassCompatible(spotCandidate instanceTypeInformation) bool
 	return false
 }
 
-func (i *instance) isSameArch(other instanceTypeInformation) bool {
+func (i *Instance) isSameArch(other instanceTypeInformation) bool {
 	thisCPU := i.typeInfo.PhysicalProcessor
 	otherCPU := other.PhysicalProcessor
 
@@ -264,7 +303,7 @@ func isARM(cpuName string) bool {
 	return strings.Contains(cpuName, "AWS")
 }
 
-func (i *instance) isEBSCompatible(spotCandidate instanceTypeInformation) bool {
+func (i *Instance) isEBSCompatible(spotCandidate instanceTypeInformation) bool {
 	if spotCandidate.EBSThroughput < i.typeInfo.EBSThroughput {
 		logger.Println("\tEBS throughput insufficient:", spotCandidate.EBSThroughput, "<", i.typeInfo.EBSThroughput)
 		return false
@@ -280,7 +319,7 @@ func (i *instance) isEBSCompatible(spotCandidate instanceTypeInformation) bool {
 //   original instance
 // - volume size: each of the volumes should be at least as big as the
 //   original instance's volumes
-func (i *instance) isStorageCompatible(spotCandidate instanceTypeInformation, attachedVolumes int) bool {
+func (i *Instance) isStorageCompatible(spotCandidate instanceTypeInformation, attachedVolumes int) bool {
 	existing := i.typeInfo
 
 	debug.Println("Comparing storage spot/instance:")
@@ -304,7 +343,7 @@ func (i *instance) isStorageCompatible(spotCandidate instanceTypeInformation, at
 	return false
 }
 
-func (i *instance) isVirtualizationCompatible(spotVirtualizationTypes []string) bool {
+func (i *Instance) isVirtualizationCompatible(spotVirtualizationTypes []string) bool {
 	current := *i.VirtualizationType
 	if len(spotVirtualizationTypes) == 0 {
 		spotVirtualizationTypes = []string{"HVM"}
@@ -323,7 +362,7 @@ func (i *instance) isVirtualizationCompatible(spotVirtualizationTypes []string) 
 	return false
 }
 
-func (i *instance) isAllowed(instanceType string, allowedList []string, disallowedList []string) bool {
+func (i *Instance) isAllowed(instanceType string, allowedList []string, disallowedList []string) bool {
 	debug.Println("Checking allowed/disallowed list")
 
 	if len(allowedList) > 0 {
@@ -346,7 +385,7 @@ func (i *instance) isAllowed(instanceType string, allowedList []string, disallow
 	return true
 }
 
-func (i *instance) getCompatibleSpotInstanceTypesListSortedAscendingByPrice(allowedList []string,
+func (i *Instance) getCompatibleSpotInstanceTypesListSortedAscendingByPrice(allowedList []string,
 	disallowedList []string) ([]instanceTypeInformation, error) {
 	current := i.typeInfo
 	var acceptableInstanceTypes []acceptableInstance
@@ -402,7 +441,7 @@ func (i *instance) getCompatibleSpotInstanceTypesListSortedAscendingByPrice(allo
 	return nil, fmt.Errorf("No cheaper spot instance types could be found")
 }
 
-func (i *instance) launchSpotReplacement() error {
+func (i *Instance) launchSpotReplacement() error {
 	instanceTypes, err := i.getCompatibleSpotInstanceTypesListSortedAscendingByPrice(
 		i.asg.getAllowedInstanceTypes(i),
 		i.asg.getDisallowedInstanceTypes(i))
@@ -446,7 +485,25 @@ func (i *instance) launchSpotReplacement() error {
 	return err
 }
 
-func (i *instance) getPricetoBid(
+// ReplaceWithSpotAndTerminate replaces an on-demand instance with a compatible
+// spot instance then immediately terminates it. This is supposed to be called
+// against a recently launched on-demand instance, while it's still in the
+// pending state.
+func (i *Instance) ReplaceWithSpotAndTerminate() error {
+	err := i.launchSpotReplacement()
+	if err != nil {
+		logger.Println("Couldn't launch spot replacement")
+		return err
+	}
+
+	err = i.terminate()
+	if err != nil {
+		logger.Println("Couldn't terminate instance", i.InstanceId)
+	}
+	return err
+}
+
+func (i *Instance) getPricetoBid(
 	baseOnDemandPrice float64, currentSpotPrice float64) float64 {
 
 	logger.Println("BiddingPolicy: ", i.region.conf.BiddingPolicy)
@@ -461,7 +518,7 @@ func (i *instance) getPricetoBid(
 	return bufferPrice
 }
 
-func (i *instance) convertBlockDeviceMappings(lc *launchConfiguration) []*ec2.BlockDeviceMapping {
+func (i *Instance) convertBlockDeviceMappings(lc *launchConfiguration) []*ec2.BlockDeviceMapping {
 	bds := []*ec2.BlockDeviceMapping{}
 	if lc == nil || len(lc.BlockDeviceMappings) == 0 {
 		debug.Println("Missing block device mappings")
@@ -496,7 +553,7 @@ func (i *instance) convertBlockDeviceMappings(lc *launchConfiguration) []*ec2.Bl
 	return bds
 }
 
-func (i *instance) convertSecurityGroups() []*string {
+func (i *Instance) convertSecurityGroups() []*string {
 	groupIDs := []*string{}
 	for _, sg := range i.SecurityGroups {
 		groupIDs = append(groupIDs, sg.GroupId)
@@ -504,7 +561,7 @@ func (i *instance) convertSecurityGroups() []*string {
 	return groupIDs
 }
 
-func (i *instance) launchTemplateHasNetworkInterfaces(id, ver *string) (bool, []*ec2.LaunchTemplateInstanceNetworkInterfaceSpecification) {
+func (i *Instance) launchTemplateHasNetworkInterfaces(id, ver *string) (bool, []*ec2.LaunchTemplateInstanceNetworkInterfaceSpecification) {
 	res, err := i.region.services.ec2.DescribeLaunchTemplateVersions(
 		&ec2.DescribeLaunchTemplateVersionsInput{
 			Versions:         []*string{ver},
@@ -527,7 +584,7 @@ func (i *instance) launchTemplateHasNetworkInterfaces(id, ver *string) (bool, []
 	return false, nil
 }
 
-func (i *instance) createRunInstancesInput(instanceType string, price float64) *ec2.RunInstancesInput {
+func (i *Instance) createRunInstancesInput(instanceType string, price float64) *ec2.RunInstancesInput {
 	var retval ec2.RunInstancesInput
 
 	// information we must (or can safely) copy/convert from the currently running
@@ -621,7 +678,7 @@ func (i *instance) createRunInstancesInput(instanceType string, price float64) *
 	return &retval
 }
 
-func (i *instance) generateTagsList() []*ec2.TagSpecification {
+func (i *Instance) generateTagsList() []*ec2.TagSpecification {
 	tags := ec2.TagSpecification{
 		ResourceType: aws.String("instance"),
 		Tags: []*ec2.Tag{
@@ -667,7 +724,7 @@ func (i *instance) generateTagsList() []*ec2.TagSpecification {
 
 // returns an instance ID as *string, set to nil if we need to wait for the next
 // run in case there are no spot instances
-func (i *instance) isReadyToAttach(asg *autoScalingGroup) bool {
+func (i *Instance) isReadyToAttach(asg *autoScalingGroup) bool {
 
 	logger.Println("Considering ", *i.InstanceId, "for attaching to", asg.name)
 

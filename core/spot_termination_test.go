@@ -3,11 +3,11 @@ package autospotting
 import (
 	"encoding/json"
 	"errors"
-	"testing"
-
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"testing"
 )
 
 func TestNewSpotTermination(t *testing.T) {
@@ -24,8 +24,8 @@ func TestGetInstanceIDDueForTermination(t *testing.T) {
 
 	expectedInstanceID := "i-123456"
 	dummyInstanceData := instanceData{
-		InstanceID:     expectedInstanceID,
-		InstanceAction: "terminate",
+		InstanceID:     aws.String(expectedInstanceID),
+		InstanceAction: aws.String("terminate"),
 	}
 
 	tests := []struct {

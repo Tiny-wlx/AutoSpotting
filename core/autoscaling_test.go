@@ -483,7 +483,7 @@ func TestNeedReplaceOnDemandInstances(t *testing.T) {
 		},
 		{name: "ASG has on-demand instances equal to the min on-demand number",
 			asgInstances: makeInstancesWithCatalog(
-				map[string]*instance{
+				map[string]*Instance{
 					"id-1": {
 						Instance: &ec2.Instance{
 							State:             &ec2.InstanceState{Name: aws.String(ec2.InstanceStateNameRunning)},
@@ -668,7 +668,7 @@ func TestTerminateInstanceInAutoScalingGroup(t *testing.T) {
 	}{
 		{name: "no err during terminate",
 			instancesASG: makeInstancesWithCatalog(
-				map[string]*instance{
+				map[string]*Instance{
 					"1": {
 						Instance: &ec2.Instance{
 							InstanceId: aws.String("1"),
@@ -696,7 +696,7 @@ func TestTerminateInstanceInAutoScalingGroup(t *testing.T) {
 		},
 		{name: "errors during terminate",
 			instancesASG: makeInstancesWithCatalog(
-				map[string]*instance{
+				map[string]*Instance{
 					"1": {
 						Instance: &ec2.Instance{
 							InstanceId: aws.String("1"),
@@ -1037,7 +1037,7 @@ func TestGetOnDemandInstanceInAZ(t *testing.T) {
 		name         string
 		asgInstances instances
 		az           *string
-		expected     *instance
+		expected     *Instance
 	}{
 		{
 			name: "ASG has no 'running' instance in the current AZ but only in other AZs",
@@ -1141,7 +1141,7 @@ func TestGetOnDemandInstanceInAZ(t *testing.T) {
 				},
 			),
 			az: aws.String("1b"),
-			expected: &instance{
+			expected: &Instance{
 				Instance: &ec2.Instance{
 					InstanceId:        aws.String("ondemand-running"),
 					State:             &ec2.InstanceState{Name: aws.String(ec2.InstanceStateNameRunning)},
@@ -1208,7 +1208,7 @@ func TestGetOnDemandInstanceInAZ(t *testing.T) {
 				},
 			),
 			az: aws.String("1b"),
-			expected: &instance{
+			expected: &Instance{
 				Instance: &ec2.Instance{
 					InstanceId:        aws.String("ondemand-running"),
 					State:             &ec2.InstanceState{Name: aws.String(ec2.InstanceStateNameRunning)},
@@ -1422,7 +1422,7 @@ func TestGetAnyOnDemandInstance(t *testing.T) {
 	tests := []struct {
 		name         string
 		asgInstances instances
-		expected     []*instance
+		expected     []*Instance
 	}{
 		{name: "ASG has no 'running' OnDemand instance",
 			asgInstances: makeInstancesWithCatalog(
@@ -1453,7 +1453,7 @@ func TestGetAnyOnDemandInstance(t *testing.T) {
 					},
 				},
 			),
-			expected: []*instance{},
+			expected: []*Instance{},
 		},
 		{name: "ASG has one 'running' OnDemand instance",
 			asgInstances: makeInstancesWithCatalog(
@@ -1492,7 +1492,7 @@ func TestGetAnyOnDemandInstance(t *testing.T) {
 					},
 				},
 			),
-			expected: []*instance{{
+			expected: []*Instance{{
 				Instance: &ec2.Instance{
 					InstanceId:        aws.String("ondemand-running"),
 					State:             &ec2.InstanceState{Name: aws.String(ec2.InstanceStateNameRunning)},
@@ -1538,7 +1538,7 @@ func TestGetAnyOnDemandInstance(t *testing.T) {
 					},
 				},
 			),
-			expected: []*instance{
+			expected: []*Instance{
 				{
 					Instance: &ec2.Instance{
 						InstanceId:        aws.String("ondemand-running2"),
@@ -1559,7 +1559,7 @@ func TestGetAnyOnDemandInstance(t *testing.T) {
 		},
 		{name: "ASG has no instance at all",
 			asgInstances: makeInstancesWithCatalog(instanceMap{}),
-			expected:     []*instance{},
+			expected:     []*Instance{},
 		},
 	}
 
@@ -1595,7 +1595,7 @@ func TestGetAnySpotInstance(t *testing.T) {
 	tests := []struct {
 		name         string
 		asgInstances instances
-		expected     []*instance
+		expected     []*Instance
 	}{
 		{name: "ASG has no 'running' Spot instance",
 			asgInstances: makeInstancesWithCatalog(
@@ -1626,7 +1626,7 @@ func TestGetAnySpotInstance(t *testing.T) {
 					},
 				},
 			),
-			expected: []*instance{},
+			expected: []*Instance{},
 		},
 		{name: "ASG has one 'running' Spot instance",
 			asgInstances: makeInstancesWithCatalog(
@@ -1665,7 +1665,7 @@ func TestGetAnySpotInstance(t *testing.T) {
 					},
 				},
 			),
-			expected: []*instance{{
+			expected: []*Instance{{
 				Instance: &ec2.Instance{
 					InstanceId:        aws.String("spot-running"),
 					State:             &ec2.InstanceState{Name: aws.String(ec2.InstanceStateNameRunning)},
@@ -1711,7 +1711,7 @@ func TestGetAnySpotInstance(t *testing.T) {
 					},
 				},
 			),
-			expected: []*instance{
+			expected: []*Instance{
 				{
 					Instance: &ec2.Instance{
 						InstanceId:        aws.String("spot-running1"),
@@ -1732,7 +1732,7 @@ func TestGetAnySpotInstance(t *testing.T) {
 		},
 		{name: "ASG has no instance at all",
 			asgInstances: makeInstancesWithCatalog(instanceMap{}),
-			expected:     []*instance{},
+			expected:     []*Instance{},
 		},
 	}
 
@@ -2103,13 +2103,13 @@ func TestGetAllowedInstanceTypes(t *testing.T) {
 	tests := []struct {
 		name         string
 		expected     []string
-		instanceInfo *instance
+		instanceInfo *Instance
 		asg          *autoScalingGroup
 		asgtags      []*autoscaling.TagDescription
 	}{
 		{name: "Single Type Tag c2.xlarge",
 			expected: []string{"c2.xlarge"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2136,7 +2136,7 @@ func TestGetAllowedInstanceTypes(t *testing.T) {
 		},
 		{name: "Single Type Cmd Line c2.xlarge",
 			expected: []string{"c2.xlarge"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2158,7 +2158,7 @@ func TestGetAllowedInstanceTypes(t *testing.T) {
 		},
 		{name: "Single Type from Base c2.xlarge",
 			expected: []string{"c2.xlarge"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "c2.xlarge",
 				},
@@ -2180,7 +2180,7 @@ func TestGetAllowedInstanceTypes(t *testing.T) {
 		},
 		{name: "ASG precedence on command line",
 			expected: []string{"c4.4xlarge"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2207,7 +2207,7 @@ func TestGetAllowedInstanceTypes(t *testing.T) {
 		},
 		{name: "ASG 'current' precedence on command line",
 			expected: []string{"c2.xlarge"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "c2.xlarge",
 				},
@@ -2234,7 +2234,7 @@ func TestGetAllowedInstanceTypes(t *testing.T) {
 		},
 		{name: "Comma separated list",
 			expected: []string{"c2.xlarge", "t2.medium", "c3.small"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2256,7 +2256,7 @@ func TestGetAllowedInstanceTypes(t *testing.T) {
 		},
 		{name: "Space separated list",
 			expected: []string{"c2.xlarge", "t2.medium", "c3.small"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2278,7 +2278,7 @@ func TestGetAllowedInstanceTypes(t *testing.T) {
 		},
 		{name: "No empty elements in comma separated list",
 			expected: []string{"c2.xlarge", "t2.medium", "c3.small"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2300,7 +2300,7 @@ func TestGetAllowedInstanceTypes(t *testing.T) {
 		},
 		{name: "No empty elements in space separated list",
 			expected: []string{"c2.xlarge", "t2.medium", "c3.small"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2340,13 +2340,13 @@ func TestGetDisallowedInstanceTypes(t *testing.T) {
 	tests := []struct {
 		name         string
 		expected     []string
-		instanceInfo *instance
+		instanceInfo *Instance
 		asg          *autoScalingGroup
 		asgtags      []*autoscaling.TagDescription
 	}{
 		{name: "Single Type Tag c2.xlarge",
 			expected: []string{"c2.xlarge"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2373,7 +2373,7 @@ func TestGetDisallowedInstanceTypes(t *testing.T) {
 		},
 		{name: "Single Type Cmd Line c2.xlarge",
 			expected: []string{"c2.xlarge"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2395,7 +2395,7 @@ func TestGetDisallowedInstanceTypes(t *testing.T) {
 		},
 		{name: "ASG precedence on command line",
 			expected: []string{"c4.4xlarge"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2422,7 +2422,7 @@ func TestGetDisallowedInstanceTypes(t *testing.T) {
 		},
 		{name: "Comma separated list",
 			expected: []string{"c2.xlarge", "t2.medium", "c3.small"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2444,7 +2444,7 @@ func TestGetDisallowedInstanceTypes(t *testing.T) {
 		},
 		{name: "Space separated list",
 			expected: []string{"c2.xlarge", "t2.medium", "c3.small"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2466,7 +2466,7 @@ func TestGetDisallowedInstanceTypes(t *testing.T) {
 		},
 		{name: "No empty elements in comma separated list",
 			expected: []string{"c2.xlarge", "t2.medium", "c3.small"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2488,7 +2488,7 @@ func TestGetDisallowedInstanceTypes(t *testing.T) {
 		},
 		{name: "No empty elements in space separated list",
 			expected: []string{"c2.xlarge", "t2.medium", "c3.small"},
-			instanceInfo: &instance{
+			instanceInfo: &Instance{
 				typeInfo: instanceTypeInformation{
 					instanceType: "typeX",
 				},
@@ -2529,7 +2529,7 @@ func Test_autoScalingGroup_hasMemberInstance(t *testing.T) {
 	tests := []struct {
 		name  string
 		Group *autoscaling.Group
-		inst  *instance
+		inst  *Instance
 		want  bool
 	}{
 		{
@@ -2541,7 +2541,7 @@ func Test_autoScalingGroup_hasMemberInstance(t *testing.T) {
 					{InstanceId: aws.String("baz")},
 				},
 			},
-			inst: &instance{
+			inst: &Instance{
 				asg:      &autoScalingGroup{},
 				Instance: &ec2.Instance{InstanceId: aws.String("bar")},
 			},
@@ -2556,7 +2556,7 @@ func Test_autoScalingGroup_hasMemberInstance(t *testing.T) {
 					{InstanceId: aws.String("baz")},
 				},
 			},
-			inst: &instance{
+			inst: &Instance{
 				asg:      &autoScalingGroup{},
 				Instance: &ec2.Instance{InstanceId: aws.String("bazinga")},
 			},
@@ -2581,7 +2581,7 @@ func Test_autoScalingGroup_findUnattachedInstanceLaunchedForThisASG(t *testing.T
 	tests := []struct {
 		name string
 		asg  autoScalingGroup
-		want *instance
+		want *Instance
 	}{
 		{
 			name: "no instances launched for this ASG",
@@ -2675,7 +2675,7 @@ func Test_autoScalingGroup_findUnattachedInstanceLaunchedForThisASG(t *testing.T
 					),
 				},
 			},
-			want: &instance{
+			want: &Instance{
 				Instance: &ec2.Instance{
 					InstanceId: aws.String("id-2"),
 					Tags: []*ec2.Tag{
@@ -2708,7 +2708,7 @@ func Test_autoScalingGroup_getAnyUnprotectedOnDemandInstance(t *testing.T) {
 		name         string
 		asgInstances instances
 
-		want *instance
+		want *Instance
 	}{
 		{
 			name: "ASG has unprotected and protected from scale-in instance",
@@ -2777,7 +2777,7 @@ func Test_autoScalingGroup_getAnyUnprotectedOnDemandInstance(t *testing.T) {
 					},
 				},
 			),
-			want: &instance{
+			want: &Instance{
 				Instance: &ec2.Instance{
 					InstanceId:        aws.String("ondemand-unprotected"),
 					State:             &ec2.InstanceState{Name: aws.String(ec2.InstanceStateNameRunning)},
@@ -2875,7 +2875,7 @@ func Test_autoScalingGroup_getAnyUnprotectedOnDemandInstance(t *testing.T) {
 					},
 				},
 			),
-			want: &instance{
+			want: &Instance{
 				Instance: &ec2.Instance{
 					InstanceId:        aws.String("ondemand-unprotected"),
 					State:             &ec2.InstanceState{Name: aws.String(ec2.InstanceStateNameRunning)},

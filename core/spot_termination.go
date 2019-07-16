@@ -28,8 +28,9 @@ type SpotTermination struct {
 //InstanceData represents JSON structure of the Detail property of CloudWatch event when a spot instance is terminated
 //Reference = https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-interruptions.html#spot-instance-termination-notices
 type instanceData struct {
-	InstanceID     string `json:"instance-id"`
-	InstanceAction string `json:"instance-action"`
+	InstanceID     *string `json:"instance-id"`
+	InstanceAction *string `json:"instance-action"`
+	State          *string `json:"state"`
 }
 
 //NewSpotTermination is a constructor for creating an instance of spotTermination to call DetachInstance
@@ -57,8 +58,8 @@ func GetInstanceIDDueForTermination(event events.CloudWatchEvent) (*string, erro
 		return nil, err
 	}
 
-	if detailData.InstanceAction != "" {
-		return &detailData.InstanceID, nil
+	if detailData.InstanceAction != nil && *detailData.InstanceAction != "" {
+		return detailData.InstanceID, nil
 	}
 
 	return nil, nil

@@ -182,8 +182,34 @@ func (r *region) scanInstances() error {
 	return nil
 }
 
+func (r *region) scanInstance(instanceID *string) error {
+	svc := r.services.ec2
+	input := &ec2.DescribeInstancesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("instance-id"),
+				Values: []*string{instanceID},
+			},
+		},
+	}
+
+	r.instances = makeInstances()
+
+	err := svc.DescribeInstancesPages(
+		input,
+		r.processDescribeInstancesPage)
+
+	if err != nil {
+		return err
+	}
+
+	debug.Println(r.instances.dump())
+
+	return nil
+}
+
 func (r *region) addInstance(inst *ec2.Instance) {
-	r.instances.add(&instance{
+	r.instances.add(&Instance{
 		Instance: inst,
 		typeInfo: r.instanceTypeInformation[*inst.InstanceType],
 		region:   r,
