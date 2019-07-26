@@ -1,0 +1,731 @@
+---
+  AWSTemplateFormatVersion: "2010-09-09"
+  Description: "AutoSpotting: automated EC2 Spot market bidder integrated with AutoScaling"
+  Parameters:
+    AllowedInstanceTypes:
+      Default: "*"
+      Description: >
+        "Comma separated list of allowed instance types for spot, in case you
+        may want to limit it to a smaller set of instance types (supports
+        globs). Example: 'm4.xlarge,r4.xlarge,m5.*'. If using the default or
+        leaving it unset, instances will be chosen by AutoSpotting's instance
+        compatibility algorithm based on CPU, memory, disk, etc., basically
+        getting you the cheapest available instances that are at least as big as
+        your existing ones. Using the 'current' keyword for this paremeter will
+        use the instance type configured in the group's launch configuration.
+        This is a global value that can be overridden on a per-group basis using
+        the 'autospotting_allowed_instance_types' tag set on the AutoScaling
+        group, which accepts the same configuration values."
+      Type: "String"
+    BiddingPolicy:
+      AllowedValues:
+        - "normal"
+        - "aggressive"
+      Default: "normal"
+      Description: >
+        "Policy choice for spot bid. If set to 'normal', we bid at the on-demand
+        price of the instance type configured in the launch configuration. If
+        set to 'aggressive', we bid by default 10% on top of the current spot
+        price(configurable using the 'SpotPricePercentageBuffer' parameter), in
+        order avoid significant spot price increases."
+      Type: "String"
+    CronSchedule:
+      Default: "* *"
+      Description: >
+        "Restrict AutoSpotting to run within a time interval given as a
+        simplified cron-like rule format restricted to hours and days of week.
+        Example: '9-18 1-5' would run it during the work-week and only within
+        the usual 9-18 office hours. This is a global value that can be
+        overridden on a per-group basis using the 'autospotting_cron_schedule'
+        tag set on the AutoScaling group. The default value '* *' makes it run
+        at all times. The timezone is the local timezone set on the Lambda
+        runtime, which currently appears to be UTC."
+      Type: "String"
+    CronScheduleState:
+      AllowedValues:
+        - "on"
+        - "off"
+      Default: "on"
+      Description: >
+        "Controls whether or not to run AutoSpotting within a time interval
+        given in the 'CronSchedule' parameter. Setting this to 'off' would make
+        it run only outside the defined interval. This is a global value thet
+        can be overridden on a per-AutoScaling-group basis using the
+        'autospotting_cron_schedule_state' tag set on the AutoScaling group".
+      Type: "String"
+    DeployUsingStackSets:
+      AllowedValues:
+        - "False"
+        - "True"
+      Default: "False"
+      Description: >
+        "Deploy using CF Stacksets -
+        https://github.com/AutoSpotting/AutoSpotting/STACKSETS.md"
+      Type: "String"
+    DisallowedInstanceTypes:
+      Default: ""
+      Description: >
+        "Comma separated list of disallowed instance types for spot, in case you
+        want to exclude specific types. This is a global
+        value that can be overridden on a per-group basis using the
+        'autospotting_disallowed_instance_types' tag set on the AutoScaling
+        group. It also supports globs, such as 't2.*,m4.large'"
+      Type: "String"
+    ExecutionFrequency:
+      Default: "rate(5 minutes)"
+      Description: >
+        "Frequency of executing the Lambda function, influences the speed of
+        replacing your instances since they are currently replaced one at a
+        time. Can accept any value documented at
+        http://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html
+        Warning: Setting this to a higher execution frequency(lower value) may
+        suddenly replace all your AutoScaling group members, especially if you
+        don't have a grace period configured. Only change this if you really
+        know what you're doing!"
+      Type: "String"
+    InstanceTerminationMethod:
+      Default: "autoscaling"
+      Description: >
+        "Instance termination method. Must be one of 'autoscaling' (default) or
+        'detach' - compatibility mode, not recommended because it won't execute
+        the termination lifecycle hooks"
+      Type: "String"
+    TerminationNotificationAction:
+      AllowedValues:
+        - "auto"
+        - "detach"
+        - "terminate"
+      Default: "auto"
+      Description: >
+        "Action to do when receiving a Spot Instance Termination Notification.
+        Must be one of 'auto' (terminate if lifecycle hook is defined, or else
+        detach) [default], 'terminate' (lifecycle hook triggered), 'detach'
+        (lifecycle hook not triggered)"
+      Type: "String"
+    FilterByTags:
+      Default: ""
+      Description: >
+        "Comma separated list of tags given in 'key=value' format, on which to
+        filter the ASGs that AutoSpotting considers. By default (if no filters
+        are specified) the 'spot-enabled=true' key/value pair is used. Example:
+        'spot-enabled=true,environment=dev'"
+      Type: "String"
+    LambdaFunctionTagKey:
+      Description: "Name of the tag to be applied to the Lambda function"
+      Default: "Name"
+      Type: "String"
+    LambdaFunctionTagValue:
+      Description: "Value of the tag to be applied to the Lambda function"
+      Default: "AutoSpotting"
+      Type: "String"
+    LambdaHandlerFunction:
+      Default: "AutoSpotting"
+      AllowedValues:
+        - "AutoSpotting"
+      Description: >
+        "Handler function for the Lambda function, don't change this unless you
+        know what you're doing!"
+      Type: "String"
+    LambdaMemorySize:
+      Default: "1024"
+      Description: >
+        "Memory allocated to the Lambda function, setting this lower will slow
+        down the execution a bit"
+      Type: "Number"
+    LambdaS3Bucket:
+      Default: "cloudprowess"
+      Description: >
+        "S3 bucket that contains the
+        precompiled binaries, you can change this to your own if you build and
+        host your own binaries."
+      Type: "String"
+    LambdaS3BucketPrefix:
+      Default: "nightly"
+      Description: >
+        "S3 bucket prefix to use as source of lambdas and template, you may need
+        to change this if you build and host your own binaries."
+      Type: "String"
+    LambdaZipName:
+      Default: "lambda.zip"
+      Description: >
+        "Name of Lambda function zip file inside the S3 bucket. Can be used to
+        update to a more recent version, such as 'lambda_build_57.zip'.
+        Precompiled binaries easy to get started with can be taken from the
+        'cloudprowess' S3 public bucket, see
+        https://cloudprowess.s3.amazonaws.com/index.html"
+      Type: "String"
+    LogRetentionPeriod:
+      Default: "7"
+      Description: >
+        "Number of days to keep the Lambda function logs in CloudWatch."
+      Type: "Number"
+    MinOnDemandNumber:
+      Default: "0"
+      Description: >
+        "Minimum on-demand instances (absolute number) to be kept in each of
+        your groups. It is a global default value that can be overridden on a
+        per-group basis using the 'autospotting_min_on_demand_number' tag that
+        can be set on the AutoScaling group. It takes precedence over
+        'MinOnDemandPercentage' parameter and its corresponding overriding tag,
+        so it doesn't make sense to pass both of them."
+      Type: "Number"
+    MinOnDemandPercentage:
+      Default: "0.0"
+      Description: >
+        "Minimum on-demand instances (as percentage of the instances currently
+        running in each group) that will be kept when replacing with spot
+        instances. It is also a global default value that can be overridden on a
+        per-group basis using the 'autospotting_min_on_demand_percentage' tag
+        that can be set on the AutoScaling group. The 'MinOnDemandNumber'
+        parameter takes precedence if both these parameters are passed."
+      Type: "Number"
+    OnDemandPriceMultiplier:
+      Default: "1.0"
+      Description: >
+        "Multiplier for the on-demand price. This is useful for volume discounts
+        or if you want to set your bid price to be lower than the on demand
+        price to ensure you don't run spot instances instead of your existing
+        reserved instances."
+      Type: "Number"
+    Regions:
+      Default: "*"
+      Description: >
+        "Space separated list of regions where it should run (supports globs),
+        in case you may want to limit it to a smaller set of regions.
+        Example: 'us-east-1 eu-*'"
+      Type: "String"
+    SpotPricePercentageBuffer:
+      Default: "10.0"
+      Description: >
+        "Percentage Value of the bid above the current spot price. A spot bid
+        would be placed at a value = current_spot_price * [1 +
+        (spot_price_buffer_percentage/100.0)]. The main benefit is that it
+        protects the group from running spot instances that got significantly
+        more expensive than when they were initially launched, but still
+        somewhat less than the on-demand price. This is a global value that can
+        be overridden on a per-group basis using the
+        'autospotting_spot_price_buffer_percentage' tag set on the AutoScaling
+        group. Warning: multiple spot instances may be terminated suddenly once
+        the price was reached, use with care!"
+      Type: "Number"
+    SpotProductDescription:
+      AllowedValues:
+        - "Linux/UNIX"
+        - "SUSE Linux"
+        - "Windows"
+        - "Linux/UNIX (Amazon VPC)"
+        - "SUSE Linux (Amazon VPC)"
+        - "Windows (Amazon VPC)"
+      Default: "Linux/UNIX (Amazon VPC)"
+      Description: >
+        "The Spot Product or operating system to use when looking up spot price
+        history in the market. Valid choices: 'Linux/UNIX | SUSE Linux | Windows
+        | Linux/UNIX (Amazon VPC) | SUSE Linux (Amazon VPC) | Windows (Amazon
+        VPC)'"
+      Type: "String"
+    StackSetsMainRegion:
+      Default: "us-east-1"
+      Description: >
+        "Region of the Main Stack - StackSetsOnly.
+        (Need to add this region as first when you specify in which regions deploy stack)"
+      Type: "String"
+    TagFilteringMode:
+      AllowedValues:
+        - "opt-in"
+        - "opt-out"
+      Default: "opt-in"
+      Description: >
+        "Controls the behavior against the tagged AutoScaling groups. Defaults
+        to 'opt-in', only processing the groups tagged with 'spot-enabled=true'
+        or whatever else you may have configured using the 'FilterByTags'
+        option. The 'opt-out' mode yields opposite behavior, running against all
+        groups except for those tagged with 'spot-enabled=false' or other values
+        configured in the same 'FilterByTags' option"
+      Type: "String"
+    License:
+      Default: "evaluation"
+      AllowedValues:
+        - "evaluation"
+        - "I_am_supporting_it_on_Patreon"
+        - "I_contributed_to_development_within_the_last_year"
+        - "I_built_it_from_source_code"
+      Description: >
+        "Chose the option that best describes your current situation. Evaluation
+        binaries are restricted to up to $1000 in monthly savings, the others
+        are not restricted"
+      Type: "String"
+  Conditions:
+    StackSetsFalse: !Equals
+        - !Ref DeployUsingStackSets
+        - "False"
+    StackSetsTrue: !Equals
+        - !Ref DeployUsingStackSets
+        - "True"
+    StackIsMain: !Or
+        - !Condition StackSetsIsMain
+        - !Condition StackSetsFalse
+    StackSetsIsMain: !And
+        - !Condition StackSetsTrue
+        - !Equals
+            - !Ref StackSetsMainRegion
+            - !Ref AWS::Region
+    StackSetsIsRegional: !And
+        - !Condition StackSetsTrue
+        - !Not
+            - !Equals
+                - !Ref StackSetsMainRegion
+                - !Ref AWS::Region
+  Outputs:
+    AutoSpottingLambdaARN:
+      Condition: "StackSetsIsMain"
+      Value:
+        Fn::GetAtt:
+          - "LambdaFunction"
+          - "Arn"
+    LambdaRegionalExecutionRoleARN:
+      Condition: "StackSetsIsMain"
+      Value:
+        Fn::GetAtt:
+          - "LambdaRegionalExecutionRole"
+          - "Arn"
+  Resources:
+    AutoSpotTeminationEventRule:
+      Condition: "StackSetsTrue"
+      Type: "AWS::Events::Rule"
+      Properties:
+        Description: "This rule is triggered 2 minutes before AWS terminates a spot instance"
+        EventPattern:
+          detail-type:
+            - "EC2 Spot Instance Interruption Warning"
+          source:
+            - "aws.ec2"
+        State: "ENABLED"
+        Targets:
+          -
+            Id: "AutoSpottingTerminationEventGenerator"
+            InputTransformer: !If
+              - "StackSetsIsRegional"
+              -
+                InputPathsMap: {
+                  "id": "$.id",
+                  "detail-type": "$.detail-type",
+                  "source": "$.source",
+                  "account": "$.account",
+                  "time": "$.time",
+                  "region": "$.region",
+                  "resources": "$.resources",
+                  "detail": "$.detail"
+                }
+                InputTemplate: !Join ["",
+                  [
+                    "{",
+                    "\"id\": <id>,",
+                    "\"detail-type\": <detail-type>,",
+                    "\"source\": <source>,",
+                    "\"account\": <account>,",
+                    "\"time\": <time>,",
+                    "\"region\": <region>,",
+                    "\"resources\": <resources>,",
+                    "\"detail\": <detail>,",
+                    "\"AutospottingLambdaArn\": \"", !GetAtt RegionalStackSetCustomResource.AutoSpottingLambdaARN, "\"",
+                    "}"
+                  ]
+                ]
+              - !Ref 'AWS::NoValue'
+            Arn: !If
+              - "StackSetsIsRegional"
+              - Fn::GetAtt:
+                  - "TerminationEventRuleFunction"
+                  - "Arn"
+              - Fn::GetAtt:
+                  - "LambdaFunction"
+                  - "Arn"
+    LambdaExecutionRole:
+      Condition: "StackIsMain"
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+            -
+              Action: "sts:AssumeRole"
+              Effect: "Allow"
+              Principal:
+                Service:
+                  - "lambda.amazonaws.com"
+        Path: "/lambda/"
+      Type: "AWS::IAM::Role"
+    LambdaRegionalStackExecutionRole:
+      Condition: "StackSetsFalse"
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+            -
+              Action: "sts:AssumeRole"
+              Effect: "Allow"
+              Principal:
+                Service:
+                  - "lambda.amazonaws.com"
+        Path: "/lambda/"
+      Type: "AWS::IAM::Role"
+    LambdaFunction:
+      Condition: "StackIsMain"
+      Properties:
+        Code:
+          S3Bucket:
+            Ref: "LambdaS3Bucket"
+          S3Key:
+            Fn::Sub: "${LambdaS3BucketPrefix}/${LambdaZipName}"
+        Description: "Implements SPOT instance automation"
+        Environment:
+          Variables:
+            ALLOWED_INSTANCE_TYPES:
+              Ref: "AllowedInstanceTypes"
+            BIDDING_POLICY:
+              Ref: "BiddingPolicy"
+            CRON_SCHEDULE:
+              Ref: "CronSchedule"
+            CRON_SCHEDULE_STATE:
+              Ref: "CronScheduleState"
+            DISALLOWED_INSTANCE_TYPES:
+              Ref: "DisallowedInstanceTypes"
+            INSTANCE_TERMINATION_METHOD:
+              Ref: "InstanceTerminationMethod"
+            LICENSE:
+              Ref: "License"
+            MIN_ON_DEMAND_NUMBER:
+              Ref: "MinOnDemandNumber"
+            MIN_ON_DEMAND_PERCENTAGE:
+              Ref: "MinOnDemandPercentage"
+            ON_DEMAND_PRICE_MULTIPLIER:
+              Ref: "OnDemandPriceMultiplier"
+            REGIONS:
+              Ref: "Regions"
+            SPOT_PRICE_BUFFER_PERCENTAGE:
+              Ref: "SpotPricePercentageBuffer"
+            SPOT_PRODUCT_DESCRIPTION:
+              Ref: "SpotProductDescription"
+            TAG_FILTERING_MODE:
+              Ref: "TagFilteringMode"
+            TAG_FILTERS:
+              Ref: "FilterByTags"
+            TERMINATION_NOTIFICATION_ACTION:
+              Ref: "TerminationNotificationAction"
+        Handler:
+          Ref: "LambdaHandlerFunction"
+        MemorySize:
+          Ref: "LambdaMemorySize"
+        Role:
+          Fn::GetAtt:
+            - "LambdaExecutionRole"
+            - "Arn"
+        Runtime: "go1.x"
+        Tags:
+          -
+            Key:
+              Ref: "LambdaFunctionTagKey"
+            Value:
+              Ref: "LambdaFunctionTagValue"
+        Timeout: "900"
+      Type: "AWS::Lambda::Function"
+    LambdaPermissionAutoSpotTeminationEventRule:
+      Condition: "StackSetsTrue"
+      Type: "AWS::Lambda::Permission"
+      Properties:
+        Action: "lambda:InvokeFunction"
+        FunctionName: !If
+          - "StackSetsIsRegional"
+          - Ref: "TerminationEventRuleFunction"
+          - Ref: "LambdaFunction"
+        Principal: "events.amazonaws.com"
+        SourceArn:
+          Fn::GetAtt:
+            - "AutoSpotTeminationEventRule"
+            - "Arn"
+    LambdaPolicy:
+      Condition: "StackIsMain"
+      Properties:
+        PolicyDocument:
+          Statement:
+            -
+              Action:
+                - "autoscaling:AttachInstances"
+                - "autoscaling:DescribeAutoScalingGroups"
+                - "autoscaling:DescribeAutoScalingInstances"
+                - "autoscaling:DescribeLaunchConfigurations"
+                - "autoscaling:DescribeTags"
+                - "autoscaling:DetachInstances"
+                - "autoscaling:TerminateInstanceInAutoScalingGroup"
+                - "autoscaling:UpdateAutoScalingGroup"
+                - "autoscaling:DescribeLifecycleHooks"
+                - "cloudformation:Describe*"
+                - "ec2:CreateTags"
+                - "ec2:DeleteTags"
+                - "ec2:DescribeInstanceAttribute"
+                - "ec2:DescribeInstances"
+                - "ec2:DescribeLaunchTemplateVersions"
+                - "ec2:DescribeRegions"
+                - "ec2:DescribeSpotPriceHistory"
+                - "ec2:RunInstances"
+                - "ec2:TerminateInstances"
+                - "iam:CreateServiceLinkedRole"
+                - "iam:PassRole"
+                - "logs:CreateLogGroup"
+                - "logs:CreateLogStream"
+                - "logs:PutLogEvents"
+              Effect: "Allow"
+              Resource: "*"
+        PolicyName: "LambdaPolicy"
+        Roles:
+          -
+            Ref: "LambdaExecutionRole"
+      Type: "AWS::IAM::Policy"
+    # This allows the creation and deletion of the regional CloudFormation templates
+    # and it used by the secondary Lambda function, backing the custom resource
+    LambdaRegionalStackPolicy:
+      Condition: "StackSetsFalse"
+      Properties:
+        PolicyDocument:
+          Statement:
+            -
+              Action:
+                - "ec2:DescribeRegions"
+                - "cloudformation:CreateStack"
+                - "cloudformation:DeleteStack"
+                - "cloudformation:Describe*"
+                - "events:PutRule"
+                - "events:PutTargets"
+                - "events:DeleteRule"
+                - "events:DescribeRule"
+                - "events:RemoveTargets"
+                - "iam:PutRolePolicy"
+                - "iam:DeleteRolePolicy"
+                - "iam:CreateRole"
+                - "iam:DeleteRole"
+                - "iam:GetRole"
+                - "iam:PassRole"
+                - "logs:CreateLogGroup"
+                - "logs:CreateLogStream"
+                - "logs:PutLogEvents"
+                - "sns:CreateTopic"
+                - "sns:DeleteTopic"
+                - "sns:GetTopicAttributes"
+                - "sns:SetTopicAttributes"
+                - "sns:Subscribe"
+                - "lambda:AddPermission"
+                - "lambda:RemovePermission"
+                - "lambda:CreateFunction"
+                - "lambda:DeleteFunction"
+                - "lambda:GetFunctionConfiguration"
+              Effect: "Allow"
+              Resource: "*"
+        PolicyName: "LambdaRegionalStackPolicy"
+        Roles:
+          -
+            Ref: "LambdaRegionalStackExecutionRole"
+      Type: "AWS::IAM::Policy"
+    LambdaRegionalExecutionRole:
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+            -
+              Action: "sts:AssumeRole"
+              Effect: "Allow"
+              Principal:
+                Service:
+                  - "lambda.amazonaws.com"
+        Path: "/lambda/"
+      Type: "AWS::IAM::Role"
+    LambdaRegionalPolicy:
+      Properties:
+        PolicyDocument:
+          Statement:
+            -
+              Action:
+                - "lambda:InvokeFunction"
+                - "logs:CreateLogGroup"
+                - "logs:CreateLogStream"
+                - "logs:PutLogEvents"
+                - "cloudformation:List*"
+                - "cloudformation:Describe*"
+              Effect: "Allow"
+              Resource: "*"
+        PolicyName: "LambdaPolicy"
+        Roles:
+          -
+            Ref: "LambdaRegionalExecutionRole"
+      Type: "AWS::IAM::Policy"
+    LogGroup:
+      Condition: "StackIsMain"
+      Properties:
+        LogGroupName:
+          Fn::Join:
+            - ""
+            -
+              - "/aws/lambda/"
+              -
+                Ref: "LambdaFunction"
+        RetentionInDays:
+          Ref: "LogRetentionPeriod"
+      Type: "AWS::Logs::LogGroup"
+    PermissionForEventsToInvokeLambda:
+      Condition: "StackIsMain"
+      Properties:
+        Action: "lambda:InvokeFunction"
+        FunctionName:
+          Ref: "LambdaFunction"
+        Principal: "events.amazonaws.com"
+        SourceArn:
+          Fn::GetAtt:
+            - "ScheduledRule"
+            - "Arn"
+      Type: "AWS::Lambda::Permission"
+    PermissionForInvokingTheLambdaFunctionFromOtherRegions:
+      Condition: "StackIsMain"
+      Properties:
+        Action: "lambda:InvokeFunction"
+        FunctionName:
+          Ref: "LambdaFunction"
+        Principal: "lambda.amazonaws.com"
+        SourceAccount:
+          Ref: "AWS::AccountId"
+      Type: "AWS::Lambda::Permission"
+    ScheduledRule:
+      Condition: "StackIsMain"
+      Properties:
+        Description: "ScheduledRule for launching the AutoSpotting Lambda function"
+        ScheduleExpression:
+          Ref: "ExecutionFrequency"
+        State: "ENABLED"
+        Targets:
+          -
+            Arn:
+              Fn::GetAtt:
+                - "LambdaFunction"
+                - "Arn"
+            Id: "AutoSpottingEventGenerator"
+      Type: "AWS::Events::Rule"
+    RegionalStackCreationLambdaFunction:
+      Condition: "StackSetsFalse"
+      Type: AWS::Lambda::Function
+      DependsOn: LambdaRegionalStackPolicy
+      Properties:
+        Description: "Creates regional CloudFormation stacks that trigger the main Lambda function on spot instance termination notification"
+        Handler: "regional_stack_lambda.handler"
+        Runtime: "python3.6"
+        Timeout: "900"
+        Role:
+          Fn::GetAtt:
+            - "LambdaRegionalStackExecutionRole"
+            - "Arn"
+        Code:
+          S3Bucket:
+            Ref: "LambdaS3Bucket"
+          S3Key:
+            Fn::Sub: "${LambdaS3BucketPrefix}/regional_stack_lambda.zip"
+    RegionalStackCustomResource:
+      Condition: "StackSetsFalse"
+      Type: "Custom::LambdaCallout"
+      Properties:
+        ServiceToken:
+          Fn::GetAtt:
+            - "RegionalStackCreationLambdaFunction"
+            - "Arn"
+        LambdaARN:
+          Fn::GetAtt:
+            - "LambdaFunction"
+            - "Arn"
+        LambdaRegionalExecutionRoleARN:
+          Fn::GetAtt:
+            - "LambdaRegionalExecutionRole"
+            - "Arn"
+        S3Bucket:
+          Ref: "LambdaS3Bucket"
+        S3BucketPrefix:
+          Ref: "LambdaS3BucketPrefix"
+      DependsOn: LambdaRegionalStackPolicy
+    RegionalStackSetCustomResource:
+      Condition: "StackSetsIsRegional"
+      Type: "Custom::LambdaCallout"
+      Properties:
+        ServiceToken:
+          Fn::GetAtt:
+            - "TerminationEventRuleFunction"
+            - "Arn"
+      DependsOn: LambdaRegionalPolicy
+    TerminationEventRuleFunction:
+      Type: AWS::Lambda::Function
+      Condition: "StackSetsIsRegional"
+      Properties:
+        Description: "Invokes the main AutoSpotting Lambda function on spot instance termination notification"
+        Handler: "index.handler"
+        Runtime: "python3.6"
+        Timeout: "300"
+        Environment:
+          Variables:
+            AUTOSPOTTING_MAIN_REGION:
+              Ref: "StackSetsMainRegion"
+            AUTOSPOTTING_MAIN_STACK_ARN:
+              Ref: "AWS::StackId"
+        Role:
+          Fn::GetAtt:
+            - "LambdaRegionalExecutionRole"
+            - "Arn"
+        Code:
+          ZipFile: |
+            from boto3 import client
+            from json import dumps
+            from os import environ
+            from sys import exc_info
+            from traceback import print_exc
+            import cfnresponse
+
+            def parse_region_from_arn(arn):
+                return arn.split(':')[3]
+
+            def get_stack_instance(svc):
+                stacksets = svc.list_stack_sets(Status='ACTIVE')['Summaries']
+                for sset in stacksets:
+                    stack_instances = svc.list_stack_instances(
+                        StackSetName=sset['StackSetName'],
+                    )['Summaries']
+                    for si in stack_instances:
+                        if si['StackId'] == environ['AUTOSPOTTING_MAIN_STACK_ARN']:
+                            for sti in stack_instances:
+                                if sti['Region'] == environ['AUTOSPOTTING_MAIN_REGION']:
+                                    return sti['StackId']
+
+            def get_stack_output(svc, stack_instance):
+                outputs = {}
+                stack_outputs = svc.describe_stacks(StackName=stack_instance)['Stacks'][0]['Outputs']
+                for output in stack_outputs:
+                    key = output['OutputKey']
+                    value = output['OutputValue'] if 'OutputValue' in output else None
+                    outputs[key] = value
+
+                return outputs
+
+            def handler(event, context):
+                if 'RequestType' in event:
+                    try:
+                        stack_output = {}
+                        svc = client('cloudformation', environ['AUTOSPOTTING_MAIN_REGION'])
+                        stack_instance = get_stack_instance(svc)
+                        if stack_instance:
+                            stack_output = get_stack_output(svc, stack_instance)
+                        cfnresponse.send(event, context, cfnresponse.SUCCESS, stack_output)
+                    except:
+                        print_exc()
+                        print("Unexpected error:", exc_info()[0])
+                        cfnresponse.send(event, context, cfnresponse.FAILED, {})
+                else:
+                    try:
+                        lambda_arn = event['AutospottingLambdaArn']
+                        svc = client('lambda', region_name=parse_region_from_arn(lambda_arn))
+                        response = svc.invoke(
+                            FunctionName=lambda_arn,
+                            LogType='Tail',
+                            Payload=dumps(event),
+                        )
+                        print(response)
+                    except:
+                        print_exc()
+                        print("Unexpected error:", exc_info()[0])
